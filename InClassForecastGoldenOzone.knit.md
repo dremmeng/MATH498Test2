@@ -1,0 +1,152 @@
+
+---
+title: "HW06 Spatial Statistics"
+author: "Doug Nychka"
+date: "2022-11-12"
+output: pdf_document
+---
+
+
+
+# Golden hourly ozone 2021
+
+The goal of this activity is to build a functional linear model to forecast tomorrows hourly ozone from today's record. Keep in mind that although the basic model will be forecasting the basis coefficients our final goal is a good forecast of the 24 hour cycle of ozone for the next day.  Forecasts of the coefficients is really just an intermediate step. 
+
+
+```r
+suppressMessages(library( fields))
+```
+
+```
+## Warning: package 'fields' was built under R version 4.1.3
+```
+
+```
+## Warning: package 'spam' was built under R version 4.1.3
+```
+
+```r
+setwd("~/School/MATH498/Test2/")
+```
+
+First some setup based a complete data record where missing hours have been infilled using Tps. 
+
+
+```r
+tDay<- 1:365
+load("O3CompleteExample.rda")
+# SVD of data,  day by hour
+lookSVD<- svd( O3Complete)
+#print( lookSVD$d)
+D<- diag(lookSVD$d)
+# adjust signs to be more interpretable
+# 
+V<- -1*lookSVD$v
+U<- -1*lookSVD$u
+# weighted basis functions (columns)
+VBasis<- V %*%D
+```
+
+Just for fun  and to get started here are the first four basis functions.
+
+
+```r
+fields.style()
+matplot( 1:24, VBasis[,1:4], type="l", lty=1, lwd=2,
+         xlab="hour", ylab="basis function")
+title("Basis functions
+      1 orange, 2 green, 3 blue, 4 red")
+```
+
+![](InClassForecastGoldenOzone_files/figure-latex/unnamed-chunk-3-1.pdf)<!-- --> 
+
+Here are the responses and lagged quantities to use both in terms of the hourly data and also in terms of the coefficients.
+Note that we are trying forecast the full day's cycle: all 24 values of O3 for the next day. 
+
+
+
+```r
+N<- nrow(O3Complete )
+tm<- tDay[-N] # can only forecast up to the second to last day!
+Y<- O3Complete[-1,] # Tommorrows O3
+X<-  O3Complete[-N,] # Todays O3
+XU<- U[-N,] # todays coefficients
+YU<- U[-1,] # tomorows coefficents
+```
+
+# Variance explained.
+Based on the singular values we have the variance explained by each basis function and also the percent variance explained. We see the variance tends to decrease after 3 to 4 singular values. 
+
+
+```r
+print(  round(lookSVD$d^2,0) )
+```
+
+```
+##  [1] 18303428   183750    77652    36155    30064    21093    12080     8178
+##  [9]     6022     5262     3986     3103     2837     2194     1711     1647
+## [17]     1317     1192      988      829      786      670      626      509
+```
+
+```r
+# and normalized as 
+print(  100*cumsum(lookSVD$d^2)/ sum( lookSVD$d^2) )
+```
+
+```
+##  [1]  97.84749  98.82979  99.24491  99.43819  99.59890  99.71166  99.77624
+##  [8]  99.81996  99.85215  99.88028  99.90159  99.91818  99.93335  99.94507
+## [15]  99.95422  99.96303  99.97007  99.97644  99.98172  99.98615  99.99035
+## [22]  99.99393  99.99728 100.00000
+```
+
+This justifies using a fewer number of basis functions than 24!
+
+# How *not* to proceed
+If we just predicted every hour for the next day using the 24
+ozone values from the previous day how many total parameters
+would be in our forecast model?
+
+
+
+# Getting started
+How well do 4 basis functions approximate the full set of hourly values?  Recall that the approximation is 
+
+
+```r
+ApproxO3<- YU[,1:4]%*% t(VBasis[,1:4])
+```
+
+and compare to ```Y``` and report the RMSE for the difference. 
+We will call this the *oracle* forecast because it assumes we can predict tomorrows coefficients perfectly. 
+
+
+# forecast of first coefficient
+Build an lm model to predict tommorows  first "U" coefficient, ```YU[,1]```,  based
+on today's 4 "U" coefficients  ```XU[,1:4]```. 
+
+Evaluate the forecast  RMSE by expanding with the first basis
+function and compare to ```Y```. Compare this RMSE to how well
+the *oracle* forecast RMSE.
+
+
+# forecast of all 4 coefficients 
+
+Now repeat using 4 lm models to forecast all 4 coefficients. 
+Again how well does it do? 
+
+# model checking 
+
+Find the RMSE for your forecast for each day and plot these over time. Comment on any patterns. 
+
+*Hint* use the apply function or **rowSums** to find the MSE for each day separately. 
+
+
+
+
+
+
+
+
+
+

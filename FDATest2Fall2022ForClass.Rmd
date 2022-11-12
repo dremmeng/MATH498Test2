@@ -1,0 +1,359 @@
+---
+title: "Test1 Spatial Statistics"
+author: "Drew Remmenga"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+- You are encouraged to use web resources and class materials
+
+- Please work alone and hand in your own work. 
+
+- Be spare in what you include and you will lose credit if you include too much extraneous output or information.    All questions count for an equal number of points. 
+
+- Any subproblems marked GRAD are required for 500 level students but will serve as an extra credit question for the 400 level students. 
+
+- Please send me email if you have questions or any concerns.  \verb+nychka@mines.edu+
+
+- Hand in your work in pdf format in Gradescope. You can keep the questions as part of what you hand in but you should begin your *answer* on a separate page. You can use  ```\newpage ```  to create a page break in your work. 
+
+
+##  Reformatting text and code that are not your answers
+
+It is harder to grade homework when all the introduction and question
+text are included. But you may also want to keep the question
+description together with your work. To address both issues  you can 
+*comment out* the question portions without just deleting them or put
+your answers in a different color. 
+
+To use the html commenting format:
+
+```
+<!-- 
+This text is now commented out and will not be part of the rendered output. 
+-->
+```
+
+To change the color you need to have Latex working:
+
+```
+\textcolor{magenta}{This is a magenta block of text. }
+```
+And the rendered version in pdf:
+
+\textcolor{magenta}{This is a magenta block of text. }
+
+## Points 
+All subsections of the problems count equally for 10 points except for Problem 4(b) which is 20 total. 
+
+ - 400 level 1(10) 2(10) 3(20) 4(40) 5(20) 6(10) =  110
+ 
+ - 500 level 1(10) 2(20) 3(20) 4(40) 5(20) 6(30) =  140
+ 
+
+
+
+
+
+## Some setup 
+Change the working directory below to where you have downloaded the data and rmd file.
+
+```{r}
+suppressMessages(library( fields))
+suppressMessages(library( lubridate))
+setwd("~/School/MATH498/Test2")
+remove( list=ls())
+```
+
+\newpage
+# Introduction 
+The state of Texas has it own power grid that is
+divided into seven subregions. The data in this test will just use the South Central region that contains Austin and San Antonio. The data is for 
+2017 and 2018 in separate matrices and the power demand (I think in megawatts, MW) for this region  is recorded every 15 minutes.  Amazingly there is no missing data in this record. 
+
+The goal in this test is to forecast next days power demand based on todays values. This is the same strategy used for the Golden hourly ozone and you should refer to the scripts: 
+ 
+```InClassForecastGoldenOzone.Rmd```, and
+```InClassForecastGoldenCV.R```
+
+for code examples.  The script ```ForecastGoldenDaily.R``` is
+a handy worked example of the in-class activity. The CV
+exercise is not asked for in this test but the code may also
+provide more examples of fitting the forecast model. 
+
+Datasets are loaded as 
+```{r}
+load("ERCOTSCentral.rda")
+ls()
+```
+
+- **dailyHour** The 96 15 minute times during the day in hours. I don't think there is an adjustment for daylight savings time. 
+
+- **load2017**  A 365X96 matrix of the power load. Rows index *days* and columns index the *15 minutes intervals* during each day. Beginning day is Jan 1 and ending day is Dec 31.
+
+- **load2018** Same format but for the year 2018
+
+Here is a plot of the mean power over the day for both years 
+
+```{r}
+
+meanProfile1<- colMeans( load2017)
+meanProfile2<- colMeans( load2018)
+matplot(dailyHour, cbind(meanProfile1,meanProfile2),
+                         , type="l", xlab="hours", ylab="load (MW)")
+title("South Central ERCOT, 2017 mean profile")
+```
+
+# Problem 1
+
+Make a functional bplot over the 96 15 miunte intervals for each day.
+Add to this the mean Profiles created above. 
+Comment on the shapes of the mean profiles, the deepest curve and the variation about these central curves for the other  days. 
+\newpage
+```{r}
+library(fda)
+fbplot(t(load2017), xlab="hours",ylab="(MW) Load", title="FBPlot of 2017 data")
+```
+There are a couple of high outliers and low outliers. The deepest curve follows the mean pretty well with some fluctuations. 
+# Problem 2
+
+## 2(a)
+- Compute the SVD for ```load2017``` and plot the log10 singular values
+as a function of their ordering from largest to smallest.
+For clarity let's refer to the SVD as 
+
+```load2017 = U %*% D %*%t(V)```
+
+and here the singular values are ```diag(D)```.
+
+- Do you see any
+obvious breaks in these values where the values become significantly smaller. I.e do you identify a "knee" in your values that is commonly looked for in a singular value plot. 
+
+- There are only 96 singular values but  365 days why the mismatch?
+
+- What are the units of the singular values  ( e.g. mega watts (MW), MW/minute, ...   )? 
+\newpage
+The matrices must be square. MW/minute. There is a knee.
+```{r}
+svd2017=svd(load2017)
+plot(diag(svd2017$d))
+```
+## 2(b) GRAD
+It is also typical to look at the cumulative effect of the singular values, (D), as ``` cumsum(D^2 )/ sum(D^2) ```. Why square the values here?
+
+
+# Problem 3 
+ Based on the SVD from Problem 2, scale the columns of the V matrix by the singular values to give a "basis function" matrix 
+ 
+``` VB<- V%*%D ```
+where ```D``` is the diagonal *matrix* of the singular values. 
+
+## Problem 3(a)
+- Plot the first and second basis functions and explain how
+adding and subtracting the second from the first changes
+the shape of the daily power demand. 
+
+- In answering this question I decided to multiply both U and V by -1. Why did I do this? Will it change any results (e.g. the forecast accuracy) for the rest of this test?
+\newpage
+Subtracting the second from the first makes the graph more sinusoidal throughout the day. It will not change the forecast accuracy. This was only to normalize U and V.
+```{r}
+V=-1*svd2017$v
+D=diag(svd2017$d)
+VB=V%*%D
+matplot(VB[,1:2], type="l", lty=1, lwd=2,
+         xlab="hour", ylab="basis function")
+title("Basis functions
+      1 orange, 2 green")
+
+```
+
+## Problem 3(b)
+
+Following the example for forecasting the daily ozone for
+Golden create an *oracle* forecast for the 96 values of the load demand that assumes you know
+the first 5 columns of the U matrix for the next day.
+(This is called on an oracle because we would not know these coefficients just based todays power demand.)
+We can also find the *average* RMSE by  ``` sqrt(mean (RMSEOracle^2)``` for the 365 days. 
+This will be used later in Problem 4. 
+
+Find the root mean squared error RMSE of these oracle forecasts by day and plot
+them over time. Comment on whether the accuracy depends 
+on the time of year.  
+\newpage
+accuracy depends on time of year.
+```{r}
+N<- nrow(load2017 )
+tm<- dailyHour[-N] # can only forecast up to the second to last day!
+Y<- load2017[-1,] 
+X<-  load2017[-N,] 
+U=-1*svd2017$u
+XU<- U[-N,] # todays coefficients
+YU<- U[-1,] # tomorows coefficents
+Approxload<- YU[,1:2]%*% t(VB[,1:2])
+RMSE=sqrt(mean(U[,1:5]^2))
+plot(RMSE)
+
+```
+
+  
+# Problem 4
+Following the example example for forecasting the daily
+ozone for Golden create the matrices. 
+
+```
+N<- 365
+YU<- U[-1,]
+XU<- U[-N,]
+```
+
+## 4(a)
+
+The plot  
+```plot( XU[,1] , YU[,1])``` suggests some strong dependence. Is this feature  *good or bad* for building a model that forecasts tommorrow's power demand based on today's values.
+\newpage
+good
+```{r}
+plot(XU[,1],YU[,1])
+```
+
+## 4(b)  20 points
+Build a model that forecasts the power demand for the next day based on today's first 5 "U" coefficients and  the basis functions. 
+
+Plot the RMSE for each day over the year and comment on any patterns in the errors due to seasonality.  
+\newpage
+Errors are highest in the middle of the year.
+```{r}
+loadHat<- U[,1:5]%*%t(VB[,1:5])
+
+RMSE<-  sqrt( 
+             rowSums( load2017 - loadHat)^2
+             )
+plot((RMSE))
+```
+## 4(c) 
+Compare the *average* RMSE for this model to the  *average*
+RMSE for the oracle forecasts. Under what circumstances
+would these forecasts have a smaller RMSE than the oracle
+ones?
+\newpage
+When the svd is a better match for the data. When we use more basis functions. 
+
+
+
+# Problem 5 
+
+For your forecasts in Problem 4 find the forecast for
+the maximum load during the day.  If ```loadHat5```
+is your forecast matrix ( 364X96)
+then a quick way to find the forecasted  maxima  and the
+actual value  is  
+
+```{r}
+maxHat <- apply(loadHat, 1, max )
+max2017<- apply(load2017, 1, max )
+```
+Note that to align these for comparison you need to lag the actual values as ```max2017[-1]```. That way the forecast and the actual day are in the same row.
+
+## Problem 5(a)
+Also find   the
+oracle forecasts. 
+How well do you do in forecasing the daily maximum compared to
+the functional data approach? Show your results using  a figure with two boxplots  
+of the 364 daily differences between the true value and your
+forecast from the 5 coefficients functional data model and the differences between the true value and the oracle forecast. 
+
+Also report the  average RMSE for your forecasts and
+the oracle.
+\newpage
+```{r}
+boxplot(RMSE)
+boxplot(loadHat)
+mean(RMSE)
+mean(loadHat)
+```
+## Problem 5(b)
+Create a forecast model ( using lm) that uses just today's
+maximum  power demand to predict tommorrow's value. Compare your results to
+the "functional data" forecasts from part (a) by finding the
+ average RMSEs of both. 
+ \newpage
+```{r}
+mean(RMSE)
+UY<- U[-1,]
+UX<- U[-N,]
+UX5<- UX[,1:5]
+look1<- lm(UY[,1:5] ~  UX5 )
+UHat<- look1$fitted.values
+O3PC4Hat<- UHat%*%t(VB[,1:5])
+
+RMSEPredict<-  sqrt( 
+  rowMeans( load2017[-1,] - O3PC4Hat)^2
+)
+mean(RMSEPredict)
+```
+The second one is better.
+
+# Problem 6
+
+## Problem 6(a) 
+Briefly explain the problem of using the RMSEs that you
+have found in Problems 3-5 as the measures of the forecast
+accuracy. 
+\newpage
+RMSE is dependent on seasonal fluctuations.
+## Problem 6(b) GRAD  
+The data set ```load2018``` are the power demands in the same
+format for 2017. Apply your forecast model from Problem 4
+to see how well it does on these new data. 
+Do not refit your model or basis functions -- i.e. use the coefficients fit from lm for the 2017 data. 
+To find the "U" coefficients for these new data you can use
+
+``` U2018<- load2018%*% VB ```
+
+Report the average RMSE for this year. 
+
+## Problem 6(c) GRAD
+What is the advantage of using the SVD from 2017 to do find the forecast accuracy for 2018?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
